@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Wand2, Brush, Eraser } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Wand2,
+  Brush,
+  Eraser,
+  MinusCircle,
+} from "lucide-react";
 import { paintColors, type ColorCategory } from "../data/colors";
 import { useMagicWand } from "../hooks/useMagicWand";
 
@@ -9,12 +16,10 @@ export const ApplyPaintPage = () => {
   const location = useLocation();
   const { image } = location.state || {};
 
-  // State
   const [activeColor, setActiveColor] = useState<string>("#F8F4F0");
   const [tolerance, setTolerance] = useState<number>(30);
   const [selection, setSelection] = useState<Set<number> | null>(null);
 
-  // 3 Canvas Refs
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
   const selectionCanvasRef = useRef<HTMLCanvasElement>(null);
   const paintCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -24,11 +29,10 @@ export const ApplyPaintPage = () => {
     selectionCanvasRef
   );
 
-  // Effect to draw the initial image
   useEffect(() => {
     if (image && imageCanvasRef.current) {
       const img = new window.Image();
-      img.crossOrigin = "Anonymous"; // Handle potential CORS issues
+      img.crossOrigin = "Anonymous";
       img.src = image;
       img.onload = () => {
         const canvases = [
@@ -74,11 +78,10 @@ export const ApplyPaintPage = () => {
     const paintCanvas = paintCanvasRef.current;
     if (!paintCanvas || !selection || selection.size === 0) return;
 
-    const { width, height } = paintCanvas;
+    const { width } = paintCanvas;
     const paintCtx = paintCanvas.getContext("2d");
     if (!paintCtx) return;
 
-    // Use a blend mode for more realistic coloring
     paintCtx.globalCompositeOperation = "multiply";
     paintCtx.fillStyle = activeColor;
 
@@ -88,12 +91,16 @@ export const ApplyPaintPage = () => {
       paintCtx.fillRect(x, y, 1, 1);
     });
 
-    // Reset blend mode
     paintCtx.globalCompositeOperation = "source-over";
+    handleClearSelection();
+  };
 
-    // Clear the visual selection mask
-    const selectionCtx = selectionCanvasRef.current?.getContext("2d");
-    selectionCtx?.clearRect(0, 0, width, height);
+  const handleClearSelection = () => {
+    const selectionCanvas = selectionCanvasRef.current;
+    if (selectionCanvas) {
+      const ctx = selectionCanvas.getContext("2d");
+      ctx?.clearRect(0, 0, selectionCanvas.width, selectionCanvas.height);
+    }
     setSelection(null);
   };
 
@@ -124,16 +131,16 @@ export const ApplyPaintPage = () => {
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-[#F8F4F0]">
-      <header className="sticky top-0 z-10 flex items-center p-4 bg-[#F8F4F0]/80 backdrop-blur-sm">
+      <header className="flex items-center p-4 bg-white/80 backdrop-blur-sm z-10">
         <button onClick={() => navigate(-1)} className="p-2">
           <ArrowLeft size={24} />
         </button>
-        <h1 className="flex-1 pr-10 text-xl font-bold text-center">
+        <h1 className="flex-1 text-xl font-bold text-center pr-10">
           Apply Paint
         </h1>
       </header>
 
-      <div className="relative w-full h-[55vh] bg-gray-900 flex items-center justify-center">
+      <div className="relative w-full h-[50vh] bg-gray-800 flex items-center justify-center">
         <canvas
           ref={imageCanvasRef}
           className="absolute max-w-full max-h-full object-contain"
@@ -150,7 +157,7 @@ export const ApplyPaintPage = () => {
         <div className="absolute top-4 right-4">
           <button
             onClick={handleDone}
-            className="flex items-center justify-center h-12 gap-2 px-4 font-bold text-white transition-opacity bg-primary rounded-lg shadow-lg hover:opacity-90"
+            className="flex items-center justify-center h-12 gap-2 px-4 font-bold text-white transition bg-green-600 rounded-lg shadow-lg hover:bg-green-700"
           >
             <Check size={20} />
             <span>Done</span>
@@ -158,7 +165,7 @@ export const ApplyPaintPage = () => {
         </div>
       </div>
 
-      <main className="flex-1 overflow-y-auto pb-28">
+      <main className="flex-1 overflow-y-auto">
         <div className="p-4 bg-white/50 border-t border-b">
           <label
             htmlFor="tolerance"
@@ -169,15 +176,15 @@ export const ApplyPaintPage = () => {
           <input
             id="tolerance"
             type="range"
-            min="5"
-            max="150"
+            min="1"
+            max="200"
             value={tolerance}
             onChange={(e) => setTolerance(Number(e.target.value))}
             className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4 p-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 p-4">
           <button
             onClick={handleApplyPaint}
             disabled={!selection}
@@ -186,8 +193,15 @@ export const ApplyPaintPage = () => {
             <Brush size={20} /> Apply Color
           </button>
           <button
+            onClick={handleClearSelection}
+            disabled={!selection}
+            className="flex items-center justify-center w-full h-12 gap-2 font-bold text-gray-700 transition bg-gray-200 rounded-lg shadow disabled:opacity-50 hover:bg-gray-300"
+          >
+            <MinusCircle size={20} /> Deselect
+          </button>
+          <button
             onClick={handleClearPaint}
-            className="flex items-center justify-center w-full h-12 gap-2 font-bold text-gray-700 transition bg-gray-200 rounded-lg shadow hover:bg-gray-300"
+            className="col-span-2 lg:col-span-1 flex items-center justify-center w-full h-12 gap-2 font-bold text-red-700 transition bg-red-100 rounded-lg shadow hover:bg-red-200"
           >
             <Eraser size={20} /> Clear All Paint
           </button>
@@ -196,7 +210,7 @@ export const ApplyPaintPage = () => {
         {paintColors.map((category: ColorCategory) => (
           <div key={category.name} className="pt-2 space-y-4">
             <div
-              className="flex items-center justify-center w-full h-20 rounded-b-xl"
+              className="flex items-center justify-center w-full h-20"
               style={{ backgroundColor: category.swatchColor }}
             >
               <h2 className="text-xl font-semibold text-[#3C3C3C]">
@@ -208,7 +222,7 @@ export const ApplyPaintPage = () => {
                 <button
                   key={color.hex}
                   onClick={() => setActiveColor(color.hex)}
-                  className={`relative w-full aspect-square rounded-xl shadow-lg border-2 transition-all ${
+                  className={`w-full aspect-square rounded-xl shadow-lg border-2 transition-all ${
                     activeColor === color.hex
                       ? "border-blue-500 ring-2 ring-blue-500"
                       : "border-transparent"

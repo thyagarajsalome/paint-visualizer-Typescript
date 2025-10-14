@@ -1,30 +1,14 @@
 import { useCallback } from "react";
 
-// Helper function to get a pixel's index in the image data array
-const getPixelIndex = (x: number, y: number, width: number) =>
-  (y * width + x) * 4;
-
-// Helper to compare two colors based on a tolerance threshold
-const colorsMatch = (
-  data: Uint8ClampedArray,
-  index1: number,
-  index2: number,
-  tolerance: number
+// A more accurate color distance function (Euclidean distance)
+const getColorDistance = (
+  c1: [number, number, number, number],
+  c2: [number, number, number, number]
 ) => {
-  const r1 = data[index1],
-    g1 = data[index1 + 1],
-    b1 = data[index1 + 2],
-    a1 = data[index1 + 3];
-  const r2 = data[index2],
-    g2 = data[index2 + 1],
-    b2 = data[index2 + 2],
-    a2 = data[index2 + 3];
-
-  return (
-    Math.abs(r1 - r2) < tolerance &&
-    Math.abs(g1 - g2) < tolerance &&
-    Math.abs(b1 - b2) < tolerance &&
-    Math.abs(a1 - a2) < tolerance
+  return Math.sqrt(
+    Math.pow(c1[0] - c2[0], 2) +
+      Math.pow(c1[1] - c2[1], 2) +
+      Math.pow(c1[2] - c2[2], 2)
   );
 };
 
@@ -36,36 +20,41 @@ export const useMagicWand = (
     (x: number, y: number, tolerance: number) => {
       const imageCanvas = imageCanvasRef.current;
       const selectionCanvas = selectionCanvasRef.current;
-      if (!imageCanvas || !selectionCanvas) return;
+      if (!imageCanvas || !selectionCanvas) return null;
 
       const imgCtx = imageCanvas.getContext("2d", { willReadFrequently: true });
       const selCtx = selectionCanvas.getContext("2d");
-      if (!imgCtx || !selCtx) return;
+      if (!imgCtx || !selCtx) return null;
 
       const { width, height } = imageCanvas;
-      selCtx.clearRect(0, 0, width, height); // Clear previous selection
+      selCtx.clearRect(0, 0, width, height);
 
       const imageData = imgCtx.getImageData(0, 0, width, height);
       const { data } = imageData;
 
-      const startIdx = getPixelIndex(Math.floor(x), Math.floor(y), width);
+      const startX = Math.floor(x);
+      const startY = Math.floor(y);
+      const startIdx = (startY * width + startX) * 4;
+      const startColor: [number, number, number, number] = [
+        data[startIdx],
+        data[startIdx + 1],
+        data[startIdx + 2],
+        data[startIdx + 3],
+      ];
 
-      const queue: [number, number][] = [[Math.floor(x), Math.floor(y)]];
-      const visited = new Set<number>([startIdx]);
+      const queue: [number, number][] = [[startX, startY]];
+      const visited = new Uint8Array(width * height);
+      const selectionIndices = new Set<number>();
 
-      const selectionMask = new Uint8ClampedArray(data.length);
+      visited[startY * width + startX] = 1;
 
       while (queue.length > 0) {
         const [curX, curY] = queue.shift()!;
-        const currentIdx = getPixelIndex(curX, curY, width);
+        const currentIdx = (curY * width + curX) * 4;
 
-        // Mark this pixel as part of the selection for visual feedback
-        selectionMask[currentIdx] = 255; // R
-        selectionMask[currentIdx + 1] = 0; // G
-        selectionMask[currentIdx + 2] = 0; // B
-        selectionMask[currentIdx + 3] = 70; // Alpha (semi-transparent)
+        selectionIndices.add(currentIdx);
 
-        const neighbors = [
+        const neighbors: [number, number][] = [
           [curX + 1, curY],
           [curX - 1, curY],
           [curX, curY + 1],
@@ -73,13 +62,23 @@ export const useMagicWand = (
         ];
 
         for (const [nx, ny] of neighbors) {
-          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-            const neighborIdx = getPixelIndex(nx, ny, width);
-            if (
-              !visited.has(neighborIdx) &&
-              colorsMatch(data, startIdx, neighborIdx, tolerance)
-            ) {
-              visited.add(neighborIdx);
+          if (
+            nx >= 0 &&
+            nx < width &&
+            ny >= 0 &&
+            ny < height &&
+            visited[ny * width + nx] === 0
+          ) {
+            visited[ny * width + nx] = 1;
+            const neighborIdx = (ny * width + nx) * 4;
+            const neighborColor: [number, number, number, number] = [
+              data[neighborIdx],
+              data[neighborIdx + 1],
+              data[neighborIdx + 2],
+              data[neighborIdx + 3],
+            ];
+
+            if (getColorDistance(startColor, neighborColor) <= tolerance) {
               queue.push([nx, ny]);
             }
           }
@@ -87,10 +86,16 @@ export const useMagicWand = (
       }
 
       // Draw the visual selection mask
-      const maskImageData = new ImageData(selectionMask, width, height);
+      const maskImageData = selCtx.createImageData(width, height);
+      selectionIndices.forEach((index) => {
+        maskImageData.data[index] = 255; // R
+        maskImageData.data[index + 1] = 0; // G
+        maskImageData.data[index + 2] = 0; // B
+        maskImageData.data[index + 3] = 70; // Alpha
+      });
       selCtx.putImageData(maskImageData, 0, 0);
 
-      return visited; // Return the set of selected pixel indices
+      return selectionIndices;
     },
     [imageCanvasRef, selectionCanvasRef]
   );
