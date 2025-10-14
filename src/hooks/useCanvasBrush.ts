@@ -21,21 +21,30 @@ export const useCanvasBrush = (
     contextRef.current = context;
   }, [canvasRef, color, brushSize]);
 
-  // CHANGED: Wrapped getCoords in useCallback
   const getCoords = useCallback(
     (event: MouseEvent | TouchEvent): { x: number; y: number } | null => {
       const canvas = canvasRef.current;
       if (!canvas) return null;
+
       const rect = canvas.getBoundingClientRect();
+
+      // Calculate scale factors to handle CSS scaling
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
       const touch = "touches" in event ? event.touches[0] : null;
       const clientX = touch ? touch.clientX : (event as MouseEvent).clientX;
       const clientY = touch ? touch.clientY : (event as MouseEvent).clientY;
-      return { x: clientX - rect.left, y: clientY - rect.top };
+
+      // Apply scale to get the correct coordinate on the canvas's drawing surface
+      return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY,
+      };
     },
     [canvasRef]
   );
 
-  // CHANGED: Wrapped startDrawing in useCallback
   const startDrawing = useCallback(
     (event: MouseEvent | TouchEvent) => {
       const coords = getCoords(event);
@@ -48,7 +57,6 @@ export const useCanvasBrush = (
     [getCoords]
   );
 
-  // CHANGED: Wrapped draw in useCallback
   const draw = useCallback(
     (event: MouseEvent | TouchEvent) => {
       if (!isDrawing) return;
@@ -61,14 +69,12 @@ export const useCanvasBrush = (
     [isDrawing, getCoords]
   );
 
-  // CHANGED: Wrapped stopDrawing in useCallback
   const stopDrawing = useCallback(() => {
     if (!contextRef.current) return;
     contextRef.current.closePath();
     setIsDrawing(false);
   }, []);
 
-  // CHANGED: Updated the dependency array to use the memoized functions
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -77,7 +83,6 @@ export const useCanvasBrush = (
     canvas.addEventListener("mousemove", draw);
     canvas.addEventListener("mouseup", stopDrawing);
     canvas.addEventListener("mouseleave", stopDrawing);
-    // ADDED: { passive: false } for better mobile experience
     canvas.addEventListener("touchstart", startDrawing, { passive: false });
     canvas.addEventListener("touchmove", draw, { passive: false });
     canvas.addEventListener("touchend", stopDrawing);
@@ -91,5 +96,5 @@ export const useCanvasBrush = (
       canvas.removeEventListener("touchmove", draw);
       canvas.removeEventListener("touchend", stopDrawing);
     };
-  }, [startDrawing, draw, stopDrawing]); // The dependency array is now stable
+  }, [startDrawing, draw, stopDrawing]);
 };
