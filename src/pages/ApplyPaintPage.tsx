@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Check } from "lucide-react";
-import { paintColors, ColorCategory } from "../data/colors";
+// CHANGED: Use `import type` for the ColorCategory interface
+import { paintColors, type ColorCategory } from "../data/colors";
 import { useCanvasBrush } from "../hooks/useCanvasBrush";
 
 export const ApplyPaintPage = () => {

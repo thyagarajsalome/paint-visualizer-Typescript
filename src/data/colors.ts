@@ -1,13 +1,13 @@
-export interface Color {
+export type Color = {
   name: string;
   hex: string;
-}
+};
 
-export interface ColorCategory {
+export type ColorCategory = {
   name: string;
   swatchColor: string;
   colors: Color[];
-}
+};
 
 export const paintColors: ColorCategory[] = [
   {
