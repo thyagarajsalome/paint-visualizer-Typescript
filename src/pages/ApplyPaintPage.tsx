@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, Check, Wand2 } from "lucide-react";
+import { ArrowLeft, Check, Wand2, Brush, Eraser } from "lucide-react";
 import { paintColors, type ColorCategory } from "../data/colors";
 import { useMagicWand } from "../hooks/useMagicWand";
 
@@ -12,42 +12,44 @@ export const ApplyPaintPage = () => {
   // State
   const [activeColor, setActiveColor] = useState<string>("#F8F4F0");
   const [tolerance, setTolerance] = useState<number>(30);
+  const [selection, setSelection] = useState<Set<number> | null>(null);
 
-  // Canvas Refs
+  // 3 Canvas Refs
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
+  const selectionCanvasRef = useRef<HTMLCanvasElement>(null);
   const paintCanvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Our new Magic Wand Hook
-  const { selectAndFill } = useMagicWand(
-    imageCanvasRef.current,
-    paintCanvasRef.current
+  const { createSelectionMask } = useMagicWand(
+    imageCanvasRef,
+    selectionCanvasRef
   );
 
   // Effect to draw the initial image
   useEffect(() => {
     if (image && imageCanvasRef.current) {
-      const canvas = imageCanvasRef.current;
-      const context = canvas.getContext("2d");
-      if (context) {
-        const img = new window.Image();
-        img.src = image;
-        img.onload = () => {
-          canvas.width = img.naturalWidth;
-          canvas.height = img.naturalHeight;
-          if (paintCanvasRef.current) {
-            paintCanvasRef.current.width = img.naturalWidth;
-            paintCanvasRef.current.height = img.naturalHeight;
+      const img = new window.Image();
+      img.crossOrigin = "Anonymous"; // Handle potential CORS issues
+      img.src = image;
+      img.onload = () => {
+        const canvases = [
+          imageCanvasRef.current,
+          selectionCanvasRef.current,
+          paintCanvasRef.current,
+        ];
+        canvases.forEach((canvas) => {
+          if (canvas) {
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
           }
-          context.drawImage(img, 0, 0);
-        };
-      }
+        });
+        const context = imageCanvasRef.current?.getContext("2d");
+        context?.drawImage(img, 0, 0);
+      };
     }
   }, [image]);
 
   const getCoords = useCallback(
-    (
-      event: React.MouseEvent<HTMLCanvasElement>
-    ): { x: number; y: number } | null => {
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = event.currentTarget;
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
@@ -63,7 +65,43 @@ export const ApplyPaintPage = () => {
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const coords = getCoords(event);
     if (coords) {
-      selectAndFill(coords.x, coords.y, activeColor, tolerance);
+      const selectedPixels = createSelectionMask(coords.x, coords.y, tolerance);
+      setSelection(selectedPixels);
+    }
+  };
+
+  const handleApplyPaint = () => {
+    const paintCanvas = paintCanvasRef.current;
+    if (!paintCanvas || !selection || selection.size === 0) return;
+
+    const { width, height } = paintCanvas;
+    const paintCtx = paintCanvas.getContext("2d");
+    if (!paintCtx) return;
+
+    // Use a blend mode for more realistic coloring
+    paintCtx.globalCompositeOperation = "multiply";
+    paintCtx.fillStyle = activeColor;
+
+    selection.forEach((index) => {
+      const x = (index / 4) % width;
+      const y = Math.floor(index / 4 / width);
+      paintCtx.fillRect(x, y, 1, 1);
+    });
+
+    // Reset blend mode
+    paintCtx.globalCompositeOperation = "source-over";
+
+    // Clear the visual selection mask
+    const selectionCtx = selectionCanvasRef.current?.getContext("2d");
+    selectionCtx?.clearRect(0, 0, width, height);
+    setSelection(null);
+  };
+
+  const handleClearPaint = () => {
+    const paintCanvas = paintCanvasRef.current;
+    if (paintCanvas) {
+      const ctx = paintCanvas.getContext("2d");
+      ctx?.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
     }
   };
 
@@ -88,8 +126,7 @@ export const ApplyPaintPage = () => {
     <div className="flex flex-col h-screen max-h-screen bg-[#F8F4F0]">
       <header className="sticky top-0 z-10 flex items-center p-4 bg-[#F8F4F0]/80 backdrop-blur-sm">
         <button onClick={() => navigate(-1)} className="p-2">
-          {" "}
-          <ArrowLeft size={24} />{" "}
+          <ArrowLeft size={24} />
         </button>
         <h1 className="flex-1 pr-10 text-xl font-bold text-center">
           Apply Paint
@@ -103,6 +140,10 @@ export const ApplyPaintPage = () => {
         />
         <canvas
           ref={paintCanvasRef}
+          className="absolute max-w-full max-h-full object-contain pointer-events-none"
+        />
+        <canvas
+          ref={selectionCanvasRef}
           onClick={handleCanvasClick}
           className="absolute max-w-full max-h-full object-contain cursor-crosshair"
         />
@@ -118,7 +159,7 @@ export const ApplyPaintPage = () => {
       </div>
 
       <main className="flex-1 overflow-y-auto pb-28">
-        <div className="p-4 bg-white/50 border-b">
+        <div className="p-4 bg-white/50 border-t border-b">
           <label
             htmlFor="tolerance"
             className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-700"
@@ -129,17 +170,33 @@ export const ApplyPaintPage = () => {
             id="tolerance"
             type="range"
             min="5"
-            max="100"
+            max="150"
             value={tolerance}
             onChange={(e) => setTolerance(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
         </div>
 
+        <div className="grid grid-cols-2 gap-4 p-4">
+          <button
+            onClick={handleApplyPaint}
+            disabled={!selection}
+            className="flex items-center justify-center w-full h-12 gap-2 font-bold text-white transition bg-blue-600 rounded-lg shadow disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-blue-700"
+          >
+            <Brush size={20} /> Apply Color
+          </button>
+          <button
+            onClick={handleClearPaint}
+            className="flex items-center justify-center w-full h-12 gap-2 font-bold text-gray-700 transition bg-gray-200 rounded-lg shadow hover:bg-gray-300"
+          >
+            <Eraser size={20} /> Clear All Paint
+          </button>
+        </div>
+
         {paintColors.map((category: ColorCategory) => (
-          <div key={category.name} className="pt-6 space-y-4">
+          <div key={category.name} className="pt-2 space-y-4">
             <div
-              className="flex items-center justify-center w-full h-24 rounded-b-xl"
+              className="flex items-center justify-center w-full h-20 rounded-b-xl"
               style={{ backgroundColor: category.swatchColor }}
             >
               <h2 className="text-xl font-semibold text-[#3C3C3C]">
