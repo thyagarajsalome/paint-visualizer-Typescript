@@ -17,7 +17,13 @@ export const useMagicWand = (
   selectionCanvasRef: React.RefObject<HTMLCanvasElement>
 ) => {
   const createSelectionMask = useCallback(
-    (x: number, y: number, tolerance: number) => {
+    (
+      x: number,
+      y: number,
+      tolerance: number,
+      existingSelection: Set<number> | null,
+      mode: "new" | "add" | "subtract" = "new"
+    ) => {
       const imageCanvas = imageCanvasRef.current;
       const selectionCanvas = selectionCanvasRef.current;
       if (!imageCanvas || !selectionCanvas) return null;
@@ -27,8 +33,6 @@ export const useMagicWand = (
       if (!imgCtx || !selCtx) return null;
 
       const { width, height } = imageCanvas;
-      selCtx.clearRect(0, 0, width, height);
-
       const imageData = imgCtx.getImageData(0, 0, width, height);
       const { data } = imageData;
 
@@ -44,7 +48,7 @@ export const useMagicWand = (
 
       const queue: [number, number][] = [[startX, startY]];
       const visited = new Uint8Array(width * height);
-      const selectionIndices = new Set<number>();
+      const newSelectionIndices = new Set<number>();
 
       visited[startY * width + startX] = 1;
 
@@ -52,7 +56,7 @@ export const useMagicWand = (
         const [curX, curY] = queue.shift()!;
         const currentIdx = (curY * width + curX) * 4;
 
-        selectionIndices.add(currentIdx);
+        newSelectionIndices.add(currentIdx);
 
         const neighbors: [number, number][] = [
           [curX + 1, curY],
@@ -85,9 +89,24 @@ export const useMagicWand = (
         }
       }
 
+      let finalSelection: Set<number>;
+      if (mode === "add" && existingSelection) {
+        finalSelection = new Set([
+          ...existingSelection,
+          ...newSelectionIndices,
+        ]);
+      } else if (mode === "subtract" && existingSelection) {
+        finalSelection = new Set(
+          [...existingSelection].filter((i) => !newSelectionIndices.has(i))
+        );
+      } else {
+        finalSelection = newSelectionIndices;
+      }
+
       // Draw the visual selection mask
+      selCtx.clearRect(0, 0, width, height);
       const maskImageData = selCtx.createImageData(width, height);
-      selectionIndices.forEach((index) => {
+      finalSelection.forEach((index) => {
         maskImageData.data[index] = 255; // R
         maskImageData.data[index + 1] = 0; // G
         maskImageData.data[index + 2] = 0; // B
@@ -95,7 +114,7 @@ export const useMagicWand = (
       });
       selCtx.putImageData(maskImageData, 0, 0);
 
-      return selectionIndices;
+      return finalSelection;
     },
     [imageCanvasRef, selectionCanvasRef]
   );

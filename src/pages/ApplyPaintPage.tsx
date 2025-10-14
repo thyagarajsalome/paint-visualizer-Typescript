@@ -69,7 +69,14 @@ export const ApplyPaintPage = () => {
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const coords = getCoords(event);
     if (coords) {
-      const selectedPixels = createSelectionMask(coords.x, coords.y, tolerance);
+      const mode = event.shiftKey ? "add" : event.altKey ? "subtract" : "new";
+      const selectedPixels = createSelectionMask(
+        coords.x,
+        coords.y,
+        tolerance,
+        selection,
+        mode
+      );
       setSelection(selectedPixels);
     }
   };
@@ -187,14 +194,14 @@ export const ApplyPaintPage = () => {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 p-4">
           <button
             onClick={handleApplyPaint}
-            disabled={!selection}
+            disabled={!selection || selection.size === 0}
             className="flex items-center justify-center w-full h-12 gap-2 font-bold text-white transition bg-blue-600 rounded-lg shadow disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-blue-700"
           >
             <Brush size={20} /> Apply Color
           </button>
           <button
             onClick={handleClearSelection}
-            disabled={!selection}
+            disabled={!selection || selection.size === 0}
             className="flex items-center justify-center w-full h-12 gap-2 font-bold text-gray-700 transition bg-gray-200 rounded-lg shadow disabled:opacity-50 hover:bg-gray-300"
           >
             <MinusCircle size={20} /> Deselect
